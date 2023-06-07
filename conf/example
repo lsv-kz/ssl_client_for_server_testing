@@ -1,0 +1,6 @@
+GET / HTTP/1.1
+Host: www.example.com
+User-Agent: anonymous
+# Connection: close
+Connection: keep-alive
+

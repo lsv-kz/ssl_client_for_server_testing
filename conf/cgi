@@ -1,0 +1,6 @@
+GET /cgi-bin/script?firstname=aaa&lastname=bbb HTTP/1.1
+Host: localhost
+User-Agent: client
+# Connection: close
+Connection: keep-alive
+

@@ -1,0 +1,6 @@
+GET /scgi_test?abc=qwerty HTTP/1.1
+Host: localhost
+User-Agent: anonymous
+# Connection: close
+Connection: keep-alive
+

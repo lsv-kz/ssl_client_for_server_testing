@@ -134,7 +134,7 @@ printf(" %s\n\n", argv[0]);
 
         snprintf(path, sizeof(path), "conf/%s", s);
         printf("------------- conf/config.txt --------------\n");
-        if (read_conf_file()) // Uri, Host
+        if (read_conf_file())
             continue;
 
         if ((n = read_req_file(path, buf_req, sizeof(buf_req))) <= 0)
@@ -237,6 +237,7 @@ printf(" %s\n\n", argv[0]);
                                                 "\r\n", Uri, Host);
         Connect req;
         req.servSocket = servSocket;
+        req.err = 0;
         req.ssl_err = 0;
         req.req.ptr = first_req;
         req.req.len = strlen(first_req);

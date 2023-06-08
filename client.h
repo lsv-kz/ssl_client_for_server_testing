@@ -156,5 +156,7 @@ void hex_dump_stderr(const char *s, int line, const void *p, int n);
 //----------------------------------------------------------------------
 SSL_CTX* InitCTX();
 const char *ssl_strerror(int err);
+int ssl_read(Connect *req, char *buf, int len);
+int ssl_write(Connect *req, const char *buf, int len);
 
 #endif

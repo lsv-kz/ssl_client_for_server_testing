@@ -51,3 +51,58 @@ SSL_CTX *InitCTX()
 
     return ctx;
 }
+//======================================================================
+int ssl_read(Connect *req, char *buf, int len)
+{
+    int ret = SSL_read(req->ssl, buf, len);
+    if (ret <= 0)
+    {
+        req->ssl_err = SSL_get_error(req->ssl, ret);
+        if (req->ssl_err == SSL_ERROR_ZERO_RETURN)
+        {
+            return 0;
+        }
+        else if (req->ssl_err == SSL_ERROR_WANT_READ)
+        {
+            req->ssl_err = 0;
+            return ERR_TRY_AGAIN;
+        }
+        else if (req->ssl_err == SSL_ERROR_WANT_WRITE)
+        {
+            fprintf(stderr, "<%s:%d> ??? Error SSL_read(): SSL_ERROR_WANT_WRITE\n", __func__, __LINE__);
+            req->ssl_err = 0;
+            return ERR_TRY_AGAIN;
+        }
+        else
+        {
+            fprintf(stderr, "<%s:%d> Error SSL_read()=%d: %s\n", __func__, __LINE__, ret, ssl_strerror(req->ssl_err));
+            return -1;
+        }
+    }
+    else
+        return ret;
+}
+//======================================================================
+int ssl_write(Connect *req, const char *buf, int len)
+{
+    int ret = SSL_write(req->ssl, buf, len);
+    if (ret <= 0)
+    {
+        req->ssl_err = SSL_get_error(req->ssl, ret);
+        if (req->ssl_err == SSL_ERROR_WANT_WRITE)
+        {
+            req->ssl_err = 0;
+            return ERR_TRY_AGAIN;
+        }
+        else if (req->ssl_err == SSL_ERROR_WANT_READ)
+        {
+            fprintf(stderr, "<%s:%d> ??? Error SSL_write(): %s, op=%s\n", __func__, __LINE__, ssl_strerror(req->ssl_err), get_str_operation(req->operation));
+            req->ssl_err = 0;
+            return ERR_TRY_AGAIN;
+        }
+        fprintf(stderr, "<%s:%d> Error SSL_write()=%d: %s, errno=%d\n", __func__, __LINE__, ret, ssl_strerror(req->ssl_err), errno);
+        return -1;
+    }
+    else
+        return ret;
+}

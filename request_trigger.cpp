@@ -77,7 +77,8 @@ static void end_request(Connect *r)
 
     if (conf->Protocol == HTTPS)
     {
-        SSL_shutdown(r->ssl);
+        if ((r->ssl_err != SSL_ERROR_SSL) && (r->ssl_err != SSL_ERROR_SYSCALL))
+            SSL_shutdown(r->ssl);
         SSL_free(r->ssl);
     }
 
@@ -166,13 +167,7 @@ static int poll_worker(int num_proc)
             continue;
         }
 
-        if (poll_fd[i].revents == POLLOUT)
-        {
-            --all;
-            r->io_status = WORK;
-            worker(r);
-        }
-        else if (poll_fd[i].revents & POLLIN)
+        if ((poll_fd[i].revents == POLLOUT) || (poll_fd[i].revents & POLLIN))
         {
             --all;
             r->io_status = WORK;
@@ -225,6 +220,7 @@ void thr_client_trigger(int num_proc)
 void trig_push_to_wait_list(Connect *r)
 {
     r->err = 0;
+    r->ssl_err = 0;
     r->respStatus = 0;
     r->event = POLLOUT;
     r->sock_timer = 0;
@@ -272,22 +268,20 @@ static void worker(Connect *r)
             int ret = SSL_connect(r->ssl);
             if (ret < 1)
             {
-                int err = SSL_get_error(r->ssl, ret);
-                if (err == SSL_ERROR_WANT_WRITE)
+                r->operation = SSL_CONNECT;
+                r->io_status = POLL;
+                r->ssl_err = SSL_get_error(r->ssl, ret);
+                if (r->ssl_err == SSL_ERROR_WANT_WRITE)
                 {
-                    r->operation = SSL_CONNECT;
                     r->event = POLLOUT;
-                    r->io_status = POLL;
                 }
-                else if (err == SSL_ERROR_WANT_READ)
+                else if (r->ssl_err == SSL_ERROR_WANT_READ)
                 {
-                    r->operation = SSL_CONNECT;
                     r->event = POLLIN;
-                    r->io_status = POLL;
                 }
                 else
                 {
-                    fprintf(stderr, "<%s:%d> Error SSL_connect()=%d\n", __func__, __LINE__, ret);
+                    fprintf(stderr, "<%s:%d> SSL_connect()=%d: %s\n", __func__, __LINE__, ret, ssl_strerror(r->ssl_err));
                     r->err = __LINE__;
                     del_from_list(r);
                     end_request(r);
@@ -303,6 +297,30 @@ static void worker(Connect *r)
     }
     else if (r->operation == SSL_CONNECT)
     {
+        int ret = SSL_connect(r->ssl);
+        if (ret < 1)
+        {
+            r->io_status = POLL;
+            r->ssl_err = SSL_get_error(r->ssl, ret);
+            if (r->ssl_err == SSL_ERROR_WANT_READ)
+            {
+                r->event = POLLIN;
+            }
+            else if (r->ssl_err == SSL_ERROR_WANT_WRITE)
+            {
+                r->event = POLLOUT;
+            }
+            else
+            {
+                fprintf(stderr, "<%s:%d> SSL_connect()=%d: %s\n", __func__, __LINE__, ret, ssl_strerror(r->ssl_err));
+                r->err = -1;
+                del_from_list(r);
+                end_request(r);
+            }
+            return;
+        }
+
+        r->ssl_err = 0;
         r->operation = SEND_REQUEST;
         ++good_conn;
         r->event = POLLOUT;

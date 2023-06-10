@@ -183,8 +183,6 @@ const char *get_str_operation(OPERATION_TYPE n)
 {
     switch (n)
     {
-        case CONNECT:
-            return "CONNECT";
         case SSL_CONNECT:
             return "SSL_CONNECT";
         case SEND_REQUEST:

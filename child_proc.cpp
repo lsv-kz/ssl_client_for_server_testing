@@ -90,24 +90,33 @@ gettimeofday(&time1, NULL);
             break;
         }
 
-        if (err == 0)
+        if (conf->Protocol == HTTPS)
         {
-            if (conf->Protocol == HTTPS)
+            req->ssl = SSL_new(conf->ctx);
+            if (!req->ssl)
             {
-                req->operation = SSL_CONNECT;
-                req->io_status = POLL;
+                fprintf(stderr, "<%s:%d> Error SSL_new()\n", __func__, __LINE__);
+                close(req->servSocket);
+                break;
             }
-            else
-            {
-                req->operation = SEND_REQUEST;
-                req->io_status = WORK;
-            }
+
+            SSL_set_fd(req->ssl, req->servSocket);
+            req->operation = SSL_CONNECT;
+            req->io_status = WORK;
         }
         else
         {
-            req->operation = CONNECT;
-            req->io_status = POLL;
+            req->operation = SEND_REQUEST;
+            if (err == 0)
+            {
+                req->io_status = WORK;
+            }
+            else
+            {
+                req->io_status = POLL;
+            }
         }
+
         req->num_proc = numProc;
         req->num_conn = all_conn;
         req->num_req = 0;

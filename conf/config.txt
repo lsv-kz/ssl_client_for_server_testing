@@ -1,5 +1,5 @@
 Timeout       65
 #ConnTimeout   50
 TimeoutPoll   10
-Trigger        n
+Trigger        y
 

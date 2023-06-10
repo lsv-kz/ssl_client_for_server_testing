@@ -250,52 +250,7 @@ mtx_.unlock();
 //======================================================================
 static void worker(Connect *r)
 {
-    if (r->operation == CONNECT)
-    {
-        if (conf->Protocol == HTTPS)
-        {
-            r->ssl = SSL_new(conf->ctx);
-            if (!r->ssl)
-            {
-                fprintf(stderr, "<%s:%d> Error SSL_new()\n", __func__, __LINE__);
-                r->err = __LINE__;
-                del_from_list(r);
-                end_request(r);
-                return;
-            }
-
-            SSL_set_fd(r->ssl, r->servSocket);
-            int ret = SSL_connect(r->ssl);
-            if (ret < 1)
-            {
-                r->operation = SSL_CONNECT;
-                r->io_status = POLL;
-                r->ssl_err = SSL_get_error(r->ssl, ret);
-                if (r->ssl_err == SSL_ERROR_WANT_WRITE)
-                {
-                    r->event = POLLOUT;
-                }
-                else if (r->ssl_err == SSL_ERROR_WANT_READ)
-                {
-                    r->event = POLLIN;
-                }
-                else
-                {
-                    fprintf(stderr, "<%s:%d> SSL_connect()=%d: %s\n", __func__, __LINE__, ret, ssl_strerror(r->ssl_err));
-                    r->err = __LINE__;
-                    del_from_list(r);
-                    end_request(r);
-                }
-                return;
-            }
-        }
-        
-        r->operation = SEND_REQUEST;
-        ++good_conn;
-        r->event = POLLOUT;
-        r->io_status = WORK;
-    }
-    else if (r->operation == SSL_CONNECT)
+    if (r->operation == SSL_CONNECT)
     {
         int ret = SSL_connect(r->ssl);
         if (ret < 1)
@@ -547,15 +502,14 @@ static void worker(Connect *r)
                             del_from_list(r);
                             end_request(r);
                         }
-                        else
-                        {
-                            
-                        }
                     }
                 }
                 else
                 {
-                    fprintf(stderr, "<%s:%d:%d:%d> ------r->chunk.size=%ld-------\n", __func__, __LINE__, r->num_conn, r->num_req, r->chunk.size);
+                    fprintf(stderr, "<%s:%d:%d:%d> r->chunk.size=%ld\n", __func__, __LINE__, r->num_conn, r->num_req, r->chunk.size);
+                    r->err = -1;
+                    del_from_list(r);
+                    end_request(r);
                 }
             }
         }

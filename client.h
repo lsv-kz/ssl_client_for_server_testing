@@ -13,6 +13,8 @@
 #include <thread>
 #include <condition_variable>
 
+#include <signal.h>
+#include <sys/stat.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <sys/resource.h>

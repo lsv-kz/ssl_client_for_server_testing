@@ -329,7 +329,6 @@ static void worker(Connect *r)
 
         r->ssl_err = 0;
         r->operation = SEND_REQUEST;
-        ++good_conn;
         r->event = POLLOUT;
         r->io_status = WORK;
     }
@@ -340,6 +339,8 @@ static void worker(Connect *r)
         {
             if ((r->req.len - r->req.i) == 0)
             {
+                if (r->num_req == 0)
+                    ++good_conn;
                 r->sock_timer = 0;
                 r->operation = READ_RESP_HEADERS;
                 r->event = POLLIN;

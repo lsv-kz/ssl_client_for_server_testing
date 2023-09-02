@@ -1,7 +1,7 @@
 #include "client.h"
 
 using namespace std;
-
+//======================================================================
 void set_all_conn(int n);
 void trigger(int n);
 //======================================================================
@@ -108,13 +108,9 @@ gettimeofday(&time1, NULL);
         {
             req->operation = SEND_REQUEST;
             if (err == 0)
-            {
                 req->io_status = WORK;
-            }
             else
-            {
                 req->io_status = POLL;
-            }
         }
 
         req->num_proc = numProc;

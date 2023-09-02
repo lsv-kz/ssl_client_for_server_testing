@@ -3,7 +3,7 @@ CC = c++
 #CC = clang++ 	
 
 OBJSDIR = objs
-#$(shell mkdir -p $(OBJSDIR))
+$(shell mkdir -p $(OBJSDIR))
 
 DEPS = client.h
 

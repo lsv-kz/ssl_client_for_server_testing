@@ -2,15 +2,14 @@
 
 using namespace std;
 //======================================================================
+extern int good_conn;
+
 static Connect *work_list_start = NULL;
 static Connect *work_list_end = NULL;
 
-static mutex mtx_;
-static condition_variable cond_;
-
 static struct pollfd *poll_fd;
 
-static int good_conn = 0, good_req = 0, num_conn = 0;
+static int good_req = 0, num_conn = 0;
 static int n_work, n_poll;
 static long long allRD = 0;
 
@@ -21,11 +20,6 @@ int chunk(Connect *r);
 int trig_get_good_req(void)
 {
     return good_req;
-}
-//======================================================================
-int trig_get_good_conn(void)
-{
-    return good_conn;
 }
 //======================================================================
 long long trig_get_all_read(void)
@@ -188,21 +182,14 @@ static int poll_worker(int num_proc)
     return 0;
 }
 //======================================================================
-void thr_client_trigger(int num_proc)
-{   
+void thr_client_trigger(int num_proc, int all_conn)
+{
+    num_conn = all_conn;
     poll_fd = new(nothrow) struct pollfd [conf->num_connections];
     if (!poll_fd)
     {
         fprintf(stderr, "[%d]<%s:%d> Error malloc(): %s\n", num_proc, __func__, __LINE__, strerror(errno));
         exit(1);
-    }
-
-    {
-    unique_lock<mutex> lk(mtx_);
-        while (num_conn == 0)
-        {
-            cond_.wait(lk);
-        }
     }
 
     while (1)
@@ -222,7 +209,6 @@ void trig_push_to_wait_list(Connect *r)
     r->err = 0;
     r->ssl_err = 0;
     r->respStatus = 0;
-    r->event = POLLOUT;
     r->sock_timer = 0;
     r->read_bytes = 0;
     r->req.i = 0;
@@ -240,17 +226,16 @@ void trig_push_to_wait_list(Connect *r)
         work_list_start = work_list_end = r;
 }
 //======================================================================
-void trigger(int n)
-{
-mtx_.lock();
-    num_conn = n;
-mtx_.unlock();
-    cond_.notify_one();
-}
-//======================================================================
 static void worker(Connect *r)
 {
-    if (r->operation == SSL_CONNECT)
+    if (r->operation == CONNECT)
+    {
+        ++good_conn;
+        r->ssl_err = 0;
+        r->operation = SEND_REQUEST;
+        r->io_status = WORK;
+    }
+    else if (r->operation == SSL_CONNECT)
     {
         int ret = SSL_connect(r->ssl);
         if (ret < 1)
@@ -272,13 +257,14 @@ static void worker(Connect *r)
                 del_from_list(r);
                 end_request(r);
             }
-            return;
         }
-
-        r->ssl_err = 0;
-        r->operation = SEND_REQUEST;
-        r->event = POLLOUT;
-        r->io_status = WORK;
+        else
+        {
+            ++good_conn;
+            r->ssl_err = 0;
+            r->operation = SEND_REQUEST;
+            r->io_status = WORK;
+        }
     }
     else if (r->operation == SEND_REQUEST)
     {
@@ -287,11 +273,9 @@ static void worker(Connect *r)
         {
             if ((r->req.len - r->req.i) == 0)
             {
-                if (r->num_req == 0)
-                    ++good_conn;
                 r->sock_timer = 0;
                 r->operation = READ_RESP_HEADERS;
-                r->event = POLLIN;
+                r->io_status = WORK;
                 r->resp.len = r->resp.lenTail = 0;
                 r->resp.ptr = NULL;
                 r->resp.p_newline = r->resp.buf;
@@ -305,6 +289,7 @@ static void worker(Connect *r)
             if (wr == ERR_TRY_AGAIN)
             {
                 r->io_status = POLL;
+                r->event = POLLOUT;
             }
             else
             {
@@ -320,7 +305,10 @@ static void worker(Connect *r)
         if (ret < 0)
         {
             if (ret == ERR_TRY_AGAIN)
+            {
                 r->io_status = POLL;
+                r->event = POLLIN;
+            }
             else
             {
                 r->err = -1;
@@ -333,6 +321,7 @@ static void worker(Connect *r)
             allRD += r->resp.lenTail;
             r->read_bytes += r->resp.lenTail;
             r->operation = READ_ENTITY;
+            r->io_status = WORK;
             if (!strcmp(Method, "HEAD"))
             {
                 del_from_list(r);
@@ -389,7 +378,10 @@ static void worker(Connect *r)
             if (ret < 0)
             {
                 if (ret == ERR_TRY_AGAIN)
+                {
                     r->io_status = POLL;
+                    r->event = POLLIN;
+                }
                 else
                 {
                     r->err = -1;
@@ -427,7 +419,10 @@ static void worker(Connect *r)
                 if (ret < 0)
                 {
                     if (ret == ERR_TRY_AGAIN)
+                    {
                         r->io_status = POLL;
+                        r->event = POLLIN;
+                    }
                     else
                     {
                         r->err = -1;
@@ -470,7 +465,10 @@ static void worker(Connect *r)
                     if (ret < 0)
                     {
                         if (ret == ERR_TRY_AGAIN)
+                        {
                             r->io_status = POLL;
+                            r->event = POLLIN;
+                        }
                         else
                         {
                             r->err = -1;

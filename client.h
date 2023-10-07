@@ -46,7 +46,7 @@ const int  ERR_TRY_AGAIN = -1000;
 const int  SIZE_BUF = 32768;
 
 enum PROTOCOL {HTTP = 1, HTTPS};
-enum OPERATION_TYPE { SSL_CONNECT = 1, SEND_REQUEST, READ_RESP_HEADERS, READ_ENTITY, };
+enum OPERATION_TYPE { CONNECT = 1, SSL_CONNECT, SEND_REQUEST, READ_RESP_HEADERS, READ_ENTITY, };
 enum IO_STATUS { POLL = 1, WORK };
 
 struct Config {
@@ -120,19 +120,17 @@ struct Connect {
     long long  read_bytes;
 };
 //----------------------------------------------------------------------
-int child_proc(int, const char*);
+void child_proc(int, const char*);
 //----------------------------------------------------------------------
 int send_headers(Connect *r);
 int get_good_req(void);
-int get_good_conn(void);
 long long get_all_read(void);
 void thr_client(int num_proc);
 void push_to_wait_list(Connect *r);
-
+//----------------------------------------------------------------------
 int trig_get_good_req(void);
-int trig_get_good_conn(void);
 long long trig_get_all_read(void);
-void thr_client_trigger(int num_proc);
+void thr_client_trigger(int num_proc, int all_conn);
 void trig_push_to_wait_list(Connect *r);
 //----------------------------------------------------------------------
 int read_req_file(const char *path, char *req, int size);

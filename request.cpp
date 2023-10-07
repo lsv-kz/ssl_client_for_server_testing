@@ -2,6 +2,8 @@
 
 using namespace std;
 //======================================================================
+extern int good_conn;
+
 static Connect *work_list_start = NULL;
 static Connect *work_list_end = NULL;
 
@@ -13,7 +15,7 @@ static condition_variable cond_;
 
 static struct pollfd *poll_fd;
 
-static int good_conn = 0, good_req = 0, num_conn, all_conn;
+static int good_req = 0, num_conn, all_conn;
 static int n_work, n_poll;
 static long long allRD = 0;
 
@@ -24,11 +26,6 @@ int chunk(Connect *r);
 int get_good_req(void)
 {
     return good_req;
-}
-//======================================================================
-int get_good_conn(void)
-{
-    return good_conn;
 }
 //======================================================================
 long long get_all_read(void)
@@ -254,7 +251,6 @@ void push_to_wait_list(Connect *r)
     r->err = 0;
     r->ssl_err = 0;
     r->respStatus = 0;
-    r->event = POLLOUT;
     r->sock_timer = 0;
     r->read_bytes = 0;
     r->req.i = 0;
@@ -282,27 +278,16 @@ mtx_.unlock();
     cond_.notify_one();
 }
 //======================================================================
-int send_headers(Connect *r)
-{
-    int wr = write_to_server(r, r->req.ptr + r->req.i, r->req.len - r->req.i);
-    if (wr < 0)
-    {
-        if (wr == ERR_TRY_AGAIN)
-            return ERR_TRY_AGAIN;
-        else
-            return -1;
-    }
-    else if (wr > 0)
-    {
-        r->req.i += wr;
-    }
-
-    return wr;
-}
-//======================================================================
 static void worker(Connect *r)
 {
-    if (r->operation == SSL_CONNECT)
+    if (r->operation == CONNECT)
+    {
+        ++good_conn;
+        r->ssl_err = 0;
+        r->operation = SEND_REQUEST;
+        r->io_status = WORK;
+    }
+    else if (r->operation == SSL_CONNECT)
     {
         int ret = SSL_connect(r->ssl);
         if (ret < 1)
@@ -324,13 +309,14 @@ static void worker(Connect *r)
                 del_from_list(r);
                 end_request(r);
             }
-            return;
         }
-
-        r->ssl_err = 0;
-        r->operation = SEND_REQUEST;
-        r->event = POLLOUT;
-        r->io_status = WORK;
+        else
+        {
+            ++good_conn;
+            r->ssl_err = 0;
+            r->operation = SEND_REQUEST;
+            r->io_status = WORK;
+        }
     }
     else if (r->operation == SEND_REQUEST)
     {
@@ -339,11 +325,9 @@ static void worker(Connect *r)
         {
             if ((r->req.len - r->req.i) == 0)
             {
-                if (r->num_req == 0)
-                    ++good_conn;
                 r->sock_timer = 0;
                 r->operation = READ_RESP_HEADERS;
-                r->event = POLLIN;
+                r->io_status = WORK;
                 r->resp.len = r->resp.lenTail = 0;
                 r->resp.ptr = NULL;
                 r->resp.p_newline = r->resp.buf;
@@ -357,6 +341,7 @@ static void worker(Connect *r)
             if (wr == ERR_TRY_AGAIN)
             {
                 r->io_status = POLL;
+                r->event = POLLOUT;
             }
             else
             {
@@ -372,7 +357,10 @@ static void worker(Connect *r)
         if (ret < 0)
         {
             if (ret == ERR_TRY_AGAIN)
+            {
                 r->io_status = POLL;
+                r->event = POLLIN;
+            }
             else
             {
                 r->err = __LINE__;
@@ -385,6 +373,7 @@ static void worker(Connect *r)
             allRD += r->resp.lenTail;
             r->read_bytes += r->resp.lenTail;
             r->operation = READ_ENTITY;
+            r->io_status = WORK;
             if (!strcmp(Method, "HEAD"))
             {
                 del_from_list(r);
@@ -441,7 +430,10 @@ static void worker(Connect *r)
             if (ret < 0)
             {
                 if (ret == ERR_TRY_AGAIN)
+                {
                     r->io_status = POLL;
+                    r->event = POLLIN;
+                }
                 else
                 {
                     r->err = __LINE__;
@@ -479,7 +471,10 @@ static void worker(Connect *r)
                 if (ret < 0)
                 {
                     if (ret == ERR_TRY_AGAIN)
+                    {
                         r->io_status = POLL;
+                        r->event = POLLIN;
+                    }
                     else
                     {
                         r->err = __LINE__;
@@ -522,7 +517,10 @@ static void worker(Connect *r)
                     if (ret < 0)
                     {
                         if (ret == ERR_TRY_AGAIN)
+                        {
                             r->io_status = POLL;
+                            r->event = POLLIN;
+                        }
                         else
                         {
                             r->err = __LINE__;
@@ -567,75 +565,4 @@ static void worker(Connect *r)
             }
         }
     }
-}
-//======================================================================
-int chunk(Connect *r)
-{
-    if (!r->resp.ptr || !r->resp.len)
-    {
-        r->resp.len = 0;
-        r->resp.ptr = r->resp.buf;
-        r->chunk.size = -1;
-        return 0;
-    }
-
-    while (1)
-    {
-        r->chunk.size = get_size_chunk(r);
-        if (r->chunk.size > 0)
-        {
-            if (r->resp.len > (r->chunk.size + 2))
-            {
-                r->resp.ptr += (r->chunk.size + 2);
-                r->resp.len -= (r->chunk.size + 2);
-                continue;
-            }
-            else if (r->resp.len == (r->chunk.size + 2))
-            {
-                r->resp.len = 0;
-                r->resp.ptr = r->resp.buf;
-                r->chunk.size = -1;
-                break;
-            }
-            else // r->resp.len < (r->chunk.size + 2)
-            {
-                r->chunk.size -= (r->resp.len - 2);
-                r->resp.len = 0;
-                break;
-            }
-        }
-        else if (r->chunk.size == 0)
-        {
-            r->chunk.end = 1;
-            if (r->resp.len == 2)
-            {
-                return 1;
-            }
-            else if (r->resp.len < 2)
-            {
-                r->chunk.size = 2 - r->resp.len;
-                r->resp.len = 0;
-                break;
-            }
-            else
-            {
-                fprintf(stderr, "<%s:%d:%d:%d> ??? r->resp.len=%ld\n", 
-                        __func__, __LINE__, r->num_conn, r->num_req, r->resp.len);
-                return -1;
-            }
-        }
-        else
-        {
-            if (r->chunk.size == ERR_TRY_AGAIN)
-            {
-                memmove(r->resp.buf, r->resp.ptr, r->resp.len);
-                r->resp.ptr = r->resp.buf;
-                r->chunk.size = -1;
-                break;
-            }
-            else
-                return -1;
-        }
-    }
-    return 0;
 }

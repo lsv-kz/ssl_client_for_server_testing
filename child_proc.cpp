@@ -2,8 +2,9 @@
 
 using namespace std;
 //======================================================================
+int good_conn = 0;
+
 void set_all_conn(int n);
-void trigger(int n);
 //======================================================================
 void get_time_connect(struct timeval *time1, char *buf, int size_buf)
 {
@@ -26,7 +27,7 @@ void get_time_connect(struct timeval *time1, char *buf, int size_buf)
     snprintf(buf, size_buf, "Time: %lu.%06lu sec", ts12, tu12);
 }
 //======================================================================
-int child_proc(int numProc, const char *buf_req)
+void child_proc(int numProc, const char *buf_req)
 {
     struct timeval time1;
     char s[256];
@@ -60,9 +61,7 @@ int child_proc(int numProc, const char *buf_req)
     thread thr;
     try
     {
-        if (conf->Trigger == 'y')
-            thr = thread(thr_client_trigger, numProc);
-        else
+        if (conf->Trigger != 'y')
             thr = thread(thr_client, numProc);
     }
     catch (...)
@@ -78,7 +77,7 @@ gettimeofday(&time1, NULL);
         Connect *req = new(nothrow) Connect;
         if (!req)
         {
-            fprintf(stderr, "<%s:%d> Error malloc(): %s\n", __func__, __LINE__, strerror(errno));
+            fprintf(stderr, "[%d]<%s:%d> Error malloc(): %s\n", numProc, __func__, __LINE__, strerror(errno));
             exit(1);
         }
 
@@ -86,7 +85,8 @@ gettimeofday(&time1, NULL);
         req->servSocket = conf->create_sock(conf->ip, conf->port, &err);
         if (req->servSocket < 0)
         {
-            fprintf(stderr, "%d<%s:%d> Error create_sock(): num_conn=%d\n", numProc, __func__, __LINE__, all_conn + 1);
+            fprintf(stderr, "[%d]<%s:%d> Error create_sock(): num_conn=%d\n", numProc, __func__, __LINE__, all_conn + 1);
+            delete req;
             break;
         }
 
@@ -95,22 +95,48 @@ gettimeofday(&time1, NULL);
             req->ssl = SSL_new(conf->ctx);
             if (!req->ssl)
             {
-                fprintf(stderr, "<%s:%d> Error SSL_new()\n", __func__, __LINE__);
+                fprintf(stderr, "[%d]<%s:%d> Error SSL_new()\n", numProc, __func__, __LINE__);
                 close(req->servSocket);
+                delete req;
                 break;
             }
 
-            SSL_set_fd(req->ssl, req->servSocket);
-            req->operation = SSL_CONNECT;
-            req->io_status = WORK;
+            if (!SSL_set_fd(req->ssl, req->servSocket))
+            {
+                fprintf(stderr, "[%d]<%s:%d> Error SSL_set_fd()\n", numProc, __func__, __LINE__);
+                close(req->servSocket);
+                delete req;
+                break;
+            }
+
+            if (SSL_connect(req->ssl) < 1)
+            {
+                req->operation = SSL_CONNECT;
+                req->io_status = POLL;
+                req->event = POLLOUT;
+            }
+            else
+            {
+                ++good_conn;
+                req->operation = SEND_REQUEST;
+                req->io_status = WORK;
+            }
         }
         else
         {
-            req->operation = SEND_REQUEST;
             if (err == 0)
+            {
+                ++good_conn;
+                req->operation = SEND_REQUEST;
                 req->io_status = WORK;
+            }
             else
+            {
+                //req->operation = SEND_REQUEST;
+                req->operation = CONNECT;
                 req->io_status = POLL;
+                req->event = POLLOUT;
+            }
         }
 
         req->num_proc = numProc;
@@ -129,24 +155,23 @@ gettimeofday(&time1, NULL);
     }
 
     if (conf->Trigger == 'y')
-        trigger(all_conn);
+        thr_client_trigger(numProc, all_conn);
     else
+    {
         set_all_conn(all_conn);
-
-    thr.join();
+        thr.join();
+    }
 
 get_time_connect(&time1, s, sizeof(s));
 
     if (conf->Trigger == 'y')
     {
         printf("-[%d]  %s, all_conn=%d, good_conn=%d, good_req=%d\n"
-           "       all read = %lld\n", numProc, s, all_conn, trig_get_good_conn(), trig_get_good_req(), trig_get_all_read());
+           "       all read = %lld\n", numProc, s, all_conn, good_conn, trig_get_good_req(), trig_get_all_read());
     }
     else
     {
         printf("-[%d]  %s, all_conn=%d, good_conn=%d, good_req=%d\n"
-           "       all read = %lld\n", numProc, s, all_conn, get_good_conn(), get_good_req(), get_all_read());
+           "       all read = %lld\n", numProc, s, all_conn, good_conn, get_good_req(), get_all_read());
     }
-
-    exit(0);    
 }

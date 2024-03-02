@@ -139,7 +139,7 @@ printf(" %s\n\n", argv[0]);
 
         if ((n = read_req_file(path, buf_req, sizeof(buf_req))) <= 0)
             continue;
-        
+
         c.connKeepAlive = connKeepAlive;
         c.req = buf_req;
 
@@ -171,7 +171,7 @@ printf(" %s\n\n", argv[0]);
             continue;
         }
 
-        if (numProc > 16)
+        if (numProc > 20)
         {
             fprintf(stderr, "!!!   Error [Num Processes > 16]\n");
             continue;

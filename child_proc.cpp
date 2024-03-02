@@ -59,15 +59,17 @@ void child_proc(int numProc, const char *buf_req)
     printf("[%d] pid: %d,  %s", numProc, getpid(), ctime(&now));
 
     thread thr;
-    try
+    if (conf->Trigger != 'y')
     {
-        if (conf->Trigger != 'y')
+        try
+        {
             thr = thread(thr_client, numProc);
-    }
-    catch (...)
-    {
-        fprintf(stderr, "[%d] <%s:%d> Error create thread(cgi_handler): errno=%d\n", numProc, __func__, __LINE__, errno);
-        exit(errno);
+        }
+        catch (...)
+        {
+            fprintf(stderr, "[%d] <%s:%d> Error create thread(cgi_handler): errno=%d\n", numProc, __func__, __LINE__, errno);
+            exit(errno);
+        }
     }
 
 gettimeofday(&time1, NULL);
@@ -109,7 +111,7 @@ gettimeofday(&time1, NULL);
                 break;
             }
 
-            if (SSL_connect(req->ssl) < 1)
+            if (err == 0)
             {
                 req->operation = SSL_CONNECT;
                 req->io_status = POLL;
@@ -117,9 +119,9 @@ gettimeofday(&time1, NULL);
             }
             else
             {
-                ++good_conn;
-                req->operation = SEND_REQUEST;
-                req->io_status = WORK;
+                req->operation = CONNECT;
+                req->io_status = POLL;
+                req->event = POLLOUT;
             }
         }
         else
@@ -132,7 +134,6 @@ gettimeofday(&time1, NULL);
             }
             else
             {
-                //req->operation = SEND_REQUEST;
                 req->operation = CONNECT;
                 req->io_status = POLL;
                 req->event = POLLOUT;
@@ -155,7 +156,10 @@ gettimeofday(&time1, NULL);
     }
 
     if (conf->Trigger == 'y')
-        thr_client_trigger(numProc, all_conn);
+    {
+        if (all_conn > 0)
+            trigger_client(numProc, all_conn);
+    }
     else
     {
         set_all_conn(all_conn);

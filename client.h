@@ -130,7 +130,7 @@ void push_to_wait_list(Connect *r);
 //----------------------------------------------------------------------
 int trig_get_good_req(void);
 long long trig_get_all_read(void);
-void thr_client_trigger(int num_proc, int all_conn);
+void trigger_client(int num_proc, int all_conn);
 void trig_push_to_wait_list(Connect *r);
 //----------------------------------------------------------------------
 int read_req_file(const char *path, char *req, int size);

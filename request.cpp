@@ -15,7 +15,7 @@ static condition_variable cond_;
 
 static struct pollfd *poll_fd;
 
-static int good_req = 0, num_conn, all_conn;
+static int good_req, num_conn, all_conn;
 static int n_work, n_poll;
 static long long allRD = 0;
 
@@ -102,9 +102,8 @@ static void end_request(Connect *r)
     shutdown(r->servSocket, SHUT_RDWR);
     close(r->servSocket);
     delete r;
-mtx_.lock();
+
     ++num_conn;
-mtx_.unlock();
 }
 //======================================================================
 static int set_poll(int num_proc)
@@ -129,7 +128,7 @@ static int set_poll(int num_proc)
         {
             fprintf(stderr, "[%d]<%s:%d> Timeout=%ld, %s, chunk=%d, chunk.end=%d\n", num_proc, __func__, __LINE__, 
                             t - r->sock_timer, get_str_operation(r->operation), r->chunk.chunk, r->chunk.end);
-            r->err = __LINE__;
+            r->err = -1;
             del_from_list(r);
             end_request(r);
         }
@@ -149,11 +148,11 @@ static int poll_worker(int num_proc)
     int ret = 0;
     if (n_poll > 0)
     {
-        int time_poll = conf->TimeoutPoll;
+        int timeout = conf->TimeoutPoll;
         if (n_work > 0)
-            time_poll = 0;
+            timeout = 0;
 
-        ret = poll(poll_fd, n_poll, time_poll);
+        ret = poll(poll_fd, n_poll, timeout);
         if (ret == -1)
         {
             fprintf(stderr, "[%d]<%s:%d> Error poll(): %s\n", num_proc, __func__, __LINE__, strerror(errno));
@@ -196,7 +195,7 @@ static int poll_worker(int num_proc)
             --all;
             fprintf(stderr, "<%s:%d> Error: events=0x%x(0x%x)\n", __func__, __LINE__, 
                                                 poll_fd[i].events, poll_fd[i].revents);
-            r->err = __LINE__;
+            r->err = -1;
             del_from_list(r);
             end_request(r);
         }
@@ -209,7 +208,8 @@ static int poll_worker(int num_proc)
 void thr_client(int num_proc)
 {
     int Timeout = 5;
-    num_conn = 0;
+    allRD = 0;
+    good_req = num_conn = 0;
     all_conn = conf->num_connections;
     
     poll_fd = new(nothrow) struct pollfd [conf->num_connections];
@@ -229,7 +229,7 @@ void thr_client(int num_proc)
                 {
                     fprintf(stderr, "<%s:%d> Timeout wait_for(): %d s, num_conn=%d\n", 
                                     __func__, __LINE__, Timeout, num_conn);
-                    num_conn = all_conn;
+                    all_conn = 0;
                 }
             }
 
@@ -282,10 +282,19 @@ static void worker(Connect *r)
 {
     if (r->operation == CONNECT)
     {
-        ++good_conn;
-        r->ssl_err = 0;
-        r->operation = SEND_REQUEST;
-        r->io_status = WORK;
+        if (conf->Protocol == HTTPS)
+        {
+            r->operation = SSL_CONNECT;
+            r->io_status = WORK;
+            r->event = POLLIN | POLLOUT;
+        }
+        else
+        {
+            ++good_conn;
+            r->operation = SEND_REQUEST;
+            r->io_status = WORK;
+        }
+        r->sock_timer = 0;
     }
     else if (r->operation == SSL_CONNECT)
     {
@@ -297,10 +306,12 @@ static void worker(Connect *r)
             if (r->ssl_err == SSL_ERROR_WANT_READ)
             {
                 r->event = POLLIN;
+                //fprintf(stderr, "<%s:%d> SSL_ERROR_WANT_READ\n", __func__, __LINE__);
             }
             else if (r->ssl_err == SSL_ERROR_WANT_WRITE)
             {
                 r->event = POLLOUT;
+                fprintf(stderr, "<%s:%d> SSL_ERROR_WANT_WRITE\n", __func__, __LINE__);
             }
             else
             {
@@ -317,6 +328,7 @@ static void worker(Connect *r)
             r->operation = SEND_REQUEST;
             r->io_status = WORK;
         }
+        r->sock_timer = 0;
     }
     else if (r->operation == SEND_REQUEST)
     {
@@ -325,7 +337,6 @@ static void worker(Connect *r)
         {
             if ((r->req.len - r->req.i) == 0)
             {
-                r->sock_timer = 0;
                 r->operation = READ_RESP_HEADERS;
                 r->io_status = WORK;
                 r->resp.len = r->resp.lenTail = 0;
@@ -333,8 +344,8 @@ static void worker(Connect *r)
                 r->resp.p_newline = r->resp.buf;
                 r->cont_len = 0;
             }
-            else
-                r->sock_timer = 0;
+
+            r->sock_timer = 0;
         }
         else if (wr < 0)
         {
@@ -345,7 +356,7 @@ static void worker(Connect *r)
             }
             else
             {
-                r->err = __LINE__;
+                r->err = -1;
                 del_from_list(r);
                 end_request(r);
             }
@@ -363,7 +374,7 @@ static void worker(Connect *r)
             }
             else
             {
-                r->err = __LINE__;
+                r->err = -1;
                 del_from_list(r);
                 end_request(r);
             }
@@ -389,7 +400,7 @@ static void worker(Connect *r)
                 int ret = chunk(r);
                 if (ret < 0)
                 {
-                    r->err = __LINE__;
+                    r->err = -1;
                     del_from_list(r);
                     end_request(r);
                 }
@@ -436,7 +447,7 @@ static void worker(Connect *r)
                 }
                 else
                 {
-                    r->err = __LINE__;
+                    r->err = -1;
                     del_from_list(r);
                     end_request(r);
                 }
@@ -445,7 +456,7 @@ static void worker(Connect *r)
             {
                 fprintf(stderr, "<%s:%d:%d> read_from_server()=0\n", 
                             __func__, __LINE__, r->num_req);
-                r->err = __LINE__;
+                r->err = -1;
                 del_from_list(r);
                 end_request(r);
             }
@@ -459,6 +470,8 @@ static void worker(Connect *r)
                     del_from_list(r);
                     end_request(r);
                 }
+                else
+                    r->sock_timer = 0;
             }
         }
         else
@@ -477,7 +490,7 @@ static void worker(Connect *r)
                     }
                     else
                     {
-                        r->err = __LINE__;
+                        r->err = -1;
                         del_from_list(r);
                         end_request(r);
                     }
@@ -486,7 +499,7 @@ static void worker(Connect *r)
                 {
                     fprintf(stderr, "<%s:%d:%d> read_from_server()=0\n", 
                                 __func__, __LINE__, r->num_req);
-                    r->err = __LINE__;
+                    r->err = -1;
                     del_from_list(r);
                     end_request(r);
                 }
@@ -523,7 +536,7 @@ static void worker(Connect *r)
                         }
                         else
                         {
-                            r->err = __LINE__;
+                            r->err = -1;
                             del_from_list(r);
                             end_request(r);
                         }
@@ -532,7 +545,7 @@ static void worker(Connect *r)
                     {
                         fprintf(stderr, "<%s:%d:%d:%d> read_from_server()=0/%lld\n", 
                                         __func__, __LINE__, r->num_conn, r->num_req, r->read_bytes);
-                        r->err = __LINE__;
+                        r->err = -1;
                         del_from_list(r);
                         end_request(r);
                     }
@@ -544,7 +557,7 @@ static void worker(Connect *r)
                         ret = chunk(r);
                         if (ret < 0)
                         {
-                            r->err = __LINE__;
+                            r->err = -1;
                             del_from_list(r);
                             end_request(r);
                         }
@@ -553,6 +566,8 @@ static void worker(Connect *r)
                             del_from_list(r);
                             end_request(r);
                         }
+                        else
+                            r->sock_timer = 0;
                     }
                 }
                 else

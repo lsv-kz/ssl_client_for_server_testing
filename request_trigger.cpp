@@ -125,11 +125,11 @@ static int poll_worker(int num_proc)
     int ret = 0;
     if (n_poll > 0)
     {
-        int time_poll = conf->TimeoutPoll;
+        int timeout = conf->TimeoutPoll;
         if (n_work > 0)
-            time_poll = 0;
+            timeout = 0;
 
-        ret = poll(poll_fd, n_poll, time_poll);
+        ret = poll(poll_fd, n_poll, timeout);
         if (ret == -1)
         {
             fprintf(stderr, "[%d]<%s:%d> Error poll(): %s\n", num_proc, __func__, __LINE__, strerror(errno));
@@ -182,7 +182,7 @@ static int poll_worker(int num_proc)
     return 0;
 }
 //======================================================================
-void thr_client_trigger(int num_proc, int all_conn)
+void trigger_client(int num_proc, int all_conn)
 {
     num_conn = all_conn;
     poll_fd = new(nothrow) struct pollfd [conf->num_connections];
@@ -230,10 +230,19 @@ static void worker(Connect *r)
 {
     if (r->operation == CONNECT)
     {
-        ++good_conn;
-        r->ssl_err = 0;
-        r->operation = SEND_REQUEST;
-        r->io_status = WORK;
+        if (conf->Protocol == HTTPS)
+        {
+            r->operation = SSL_CONNECT;
+            r->io_status = WORK;
+            r->event = POLLIN | POLLOUT;
+        }
+        else
+        {
+            ++good_conn;
+            r->operation = SEND_REQUEST;
+            r->io_status = WORK;
+        }
+        r->sock_timer = 0;
     }
     else if (r->operation == SSL_CONNECT)
     {
@@ -245,10 +254,12 @@ static void worker(Connect *r)
             if (r->ssl_err == SSL_ERROR_WANT_READ)
             {
                 r->event = POLLIN;
+                //fprintf(stderr, "<%s:%d> SSL_ERROR_WANT_READ\n", __func__, __LINE__);
             }
             else if (r->ssl_err == SSL_ERROR_WANT_WRITE)
             {
                 r->event = POLLOUT;
+                fprintf(stderr, "<%s:%d> SSL_ERROR_WANT_WRITE\n", __func__, __LINE__);
             }
             else
             {
@@ -264,6 +275,7 @@ static void worker(Connect *r)
             r->ssl_err = 0;
             r->operation = SEND_REQUEST;
             r->io_status = WORK;
+            r->sock_timer = 0;
         }
     }
     else if (r->operation == SEND_REQUEST)
@@ -273,7 +285,6 @@ static void worker(Connect *r)
         {
             if ((r->req.len - r->req.i) == 0)
             {
-                r->sock_timer = 0;
                 r->operation = READ_RESP_HEADERS;
                 r->io_status = WORK;
                 r->resp.len = r->resp.lenTail = 0;
@@ -281,8 +292,8 @@ static void worker(Connect *r)
                 r->resp.p_newline = r->resp.buf;
                 r->cont_len = 0;
             }
-            else
-                r->sock_timer = 0;
+
+            r->sock_timer = 0;
         }
         else if (wr < 0)
         {
@@ -397,7 +408,7 @@ static void worker(Connect *r)
                 del_from_list(r);
                 end_request(r);
             }
-            else
+            else // ret > 0
             {
                 allRD += ret;
                 r->read_bytes += ret;
@@ -407,6 +418,8 @@ static void worker(Connect *r)
                     del_from_list(r);
                     end_request(r);
                 }
+                else
+                    r->sock_timer = 0;
             }
         }
         else
@@ -501,6 +514,8 @@ static void worker(Connect *r)
                             del_from_list(r);
                             end_request(r);
                         }
+                        else
+                            r->sock_timer = 0;
                     }
                 }
                 else

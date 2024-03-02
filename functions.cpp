@@ -294,15 +294,15 @@ int read_req_file_(FILE *f, char *req, int size)
     *req = 0;
     char *p = req;
     int len = 0, read_startline = 0;
+    int len_end_line = strlen(end_line);
 
     while (len < size)
     {
-        int n = read_line(f, p, size - len);
-        if (n > 0)
+        int num_read = read_line(f, p, size - len);
+        if (num_read > 0)
         {
-            len += n;
-            int m = strlen(end_line);
-            if ((len + m) < size)
+            len += num_read;
+            if ((len + len_end_line) < size)
             {
                 if (read_startline == 0)
                 {
@@ -329,38 +329,36 @@ int read_req_file_(FILE *f, char *req, int size)
                     }
                 }
 
-                strcat(p, end_line);
-                len += m;
-                p += (n + m);
+                memcpy(p + num_read, end_line, len_end_line);
+                len += len_end_line;
+                p += (num_read + len_end_line);
             }
             else
                 return -1;
         }
-        else if (n == 0)
+        else if (num_read == 0)
         {
             if (feof(f))
                 return len;
 
             if (read_startline == 0)
             {
-                int m = strlen(end_line);
-                if ((len + m) < size)
+                if ((len + len_end_line) < size)
                 {
-                    memcpy(p, end_line, m + 1);
-                    len += m;
-                    p += m;
+                    memcpy(p, end_line, len_end_line + 1);
+                    len += len_end_line;
+                    p += len_end_line;
                 }
                 else
                     return -3;
             }
             else
             {
-                int m = strlen(end_line);
-                if ((len + m) < size)
+                if ((len + len_end_line) < size)
                 {
-                    memcpy(p, end_line, m + 1);
-                    len += m;
-                    p += m;
+                    memcpy(p, end_line, len_end_line + 1);
+                    len += len_end_line;
+                    p += len_end_line;
                     if (strcmp(Method, "POST"))
                         return len;
                     else
@@ -368,11 +366,19 @@ int read_req_file_(FILE *f, char *req, int size)
                         int ret;
                         while (len < size)
                         {
-                            if ((ret = fread(p, 1, size - len - 1, f)) <= 0)
-                                return len;
+                            ret = fread(p, 1, size - len - 1, f);
+                            if (ret != (size - len - 1))
+                            {
+                                if (feof(f))
+                                {
+                                    *p = 0;
+                                    return len;
+                                }
+                                else if (ferror(f))
+                                    return -1;
+                            }
                             len += ret;
                             p += ret;
-                            *p = 0;
                         }
                         *p = 0;
                         if (feof(f))
@@ -384,7 +390,7 @@ int read_req_file_(FILE *f, char *req, int size)
             }
         }
         else
-            return n;
+            return num_read;
     }
     
     if (feof(f))

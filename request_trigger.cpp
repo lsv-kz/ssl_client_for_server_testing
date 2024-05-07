@@ -402,9 +402,12 @@ static void worker(Connect *r)
             }
             else if (ret == 0)
             {
-                fprintf(stderr, "<%s:%d:%d> read_from_server()=0\n", 
+                if (r->read_bytes == 0)
+                {
+                    fprintf(stderr, "<%s:%d:%d> read_from_server()=0\n", 
                             __func__, __LINE__, r->num_req);
-                r->err = -1;
+                    r->err = -1;
+                }
                 del_from_list(r);
                 end_request(r);
             }

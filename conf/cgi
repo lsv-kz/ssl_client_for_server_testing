@@ -1,4 +1,4 @@
-GET /cgi-bin/script?firstname=aaa&lastname=bbb HTTP/1.1
+GET /cgi-bin/script?par1=qwerty HTTP/1.1
 Host: localhost
 User-Agent: client
 # Connection: close

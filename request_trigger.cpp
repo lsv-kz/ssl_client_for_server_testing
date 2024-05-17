@@ -259,7 +259,7 @@ static void worker(Connect *r)
             else if (r->ssl_err == SSL_ERROR_WANT_WRITE)
             {
                 r->event = POLLOUT;
-                fprintf(stderr, "<%s:%d> SSL_ERROR_WANT_WRITE\n", __func__, __LINE__);
+                //fprintf(stderr, "<%s:%d> SSL_ERROR_WANT_WRITE\n", __func__, __LINE__);
             }
             else
             {
@@ -290,7 +290,7 @@ static void worker(Connect *r)
                 r->resp.len = r->resp.lenTail = 0;
                 r->resp.ptr = NULL;
                 r->resp.p_newline = r->resp.buf;
-                r->cont_len = 0;
+                r->cont_len = -1;
             }
 
             r->sock_timer = 0;
@@ -360,11 +360,14 @@ static void worker(Connect *r)
             }
             else
             {
-                r->cont_len -= r->resp.len;
-                if (r->cont_len == 0)
+                if (r->cont_len != -1)
                 {
-                    del_from_list(r);
-                    end_request(r);
+                    r->cont_len -= r->resp.len;
+                    if (r->cont_len == 0)
+                    {
+                        del_from_list(r);
+                        end_request(r);
+                    }
                 }
             }
         }
@@ -376,7 +379,12 @@ static void worker(Connect *r)
         if (r->chunk.chunk == 0)
         {
             char  buf[SIZE_BUF];
-            int len = (r->cont_len > SIZE_BUF) ? SIZE_BUF : r->cont_len;
+            int len;
+            if (r->cont_len == -1)
+                len = SIZE_BUF;
+            else
+                len = (r->cont_len > SIZE_BUF) ? SIZE_BUF : r->cont_len;
+
             if (len == 0)
             {
                 del_from_list(r);
@@ -415,7 +423,8 @@ static void worker(Connect *r)
             {
                 allRD += ret;
                 r->read_bytes += ret;
-                r->cont_len -= ret;
+                if (r->cont_len != -1)
+                    r->cont_len -= ret;
                 if (r->cont_len == 0)
                 {
                     del_from_list(r);

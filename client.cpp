@@ -251,6 +251,8 @@ printf(" %s\n\n", argv[0]);
         if (n < 0)
         {
             fprintf(stdout, "<%s:%d> Error client()\n", __func__, __LINE__);
+            time(&now);
+            printf("\n%s", ctime(&now));
             continue;
         }
 

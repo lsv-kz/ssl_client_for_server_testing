@@ -98,6 +98,7 @@ static int worker(Connect *r)
         r->operation = SEND_REQUEST;
         r->event = POLLOUT;
         r->io_status = WORK;
+        r->sock_timer = 0;
     }
     else if (r->operation == SEND_REQUEST)
     {
@@ -106,14 +107,13 @@ static int worker(Connect *r)
         {
             if ((r->req.len - r->req.i) == 0)
             {
-                r->sock_timer = 0;
                 r->operation = READ_RESP_HEADERS;
                 r->event = POLLIN;
                 r->cont_len = 0;
                 r->resp.len = 0;
             }
-            else
-                r->sock_timer = 0;
+
+            r->sock_timer = 0;
         }
         else if (wr < 0)
         {

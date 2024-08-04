@@ -173,7 +173,7 @@ static int poll_worker(int num_proc)
 
     int i = 0, all = ret + n_work;
     Connect *r = work_list_start, *next = NULL;
-    
+
     for ( ; (all > 0) && r; r = next)
     {
         next = r->next;
@@ -212,7 +212,7 @@ void thr_client(int num_proc)
     allRD = 0;
     good_req = num_conn = 0;
     all_conn = conf->num_connections;
-    
+
     poll_fd = new(nothrow) struct pollfd [conf->num_connections];
     if (!poll_fd)
     {
@@ -328,8 +328,8 @@ static void worker(Connect *r)
             r->ssl_err = 0;
             r->operation = SEND_REQUEST;
             r->io_status = WORK;
+            r->sock_timer = 0;
         }
-        r->sock_timer = 0;
     }
     else if (r->operation == SEND_REQUEST)
     {
@@ -437,7 +437,6 @@ static void worker(Connect *r)
                 len = SIZE_BUF;
             else
                 len = (r->cont_len > SIZE_BUF) ? SIZE_BUF : r->cont_len;
-
             if (len == 0)
             {
                 del_from_list(r);
@@ -472,7 +471,7 @@ static void worker(Connect *r)
                 del_from_list(r);
                 end_request(r);
             }
-            else
+            else // ret > 0
             {
                 allRD += ret;
                 r->read_bytes += ret;
@@ -482,9 +481,9 @@ static void worker(Connect *r)
                 {
                     del_from_list(r);
                     end_request(r);
+                    return;
                 }
-                else
-                    r->sock_timer = 0;
+                r->sock_timer = 0;
             }
         }
         else

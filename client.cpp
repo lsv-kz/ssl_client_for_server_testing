@@ -285,7 +285,7 @@ printf(" %s\n\n", argv[0]);
 
         while (wait(NULL) != -1);
         time(&now);
-        printf("\n%s", ctime(&now));
+        printf("\nEnd %s", ctime(&now));
         close(f_log);
     }
 

@@ -384,7 +384,6 @@ static void worker(Connect *r)
                 len = SIZE_BUF;
             else
                 len = (r->cont_len > SIZE_BUF) ? SIZE_BUF : r->cont_len;
-
             if (len == 0)
             {
                 del_from_list(r);
@@ -429,9 +428,9 @@ static void worker(Connect *r)
                 {
                     del_from_list(r);
                     end_request(r);
+                    return;
                 }
-                else
-                    r->sock_timer = 0;
+                r->sock_timer = 0;
             }
         }
         else

@@ -304,6 +304,7 @@ static void worker(Connect *r)
             }
             else
             {
+                fprintf(stderr, "<%s:%d> Error send_headers()=%d\n", __func__, __LINE__, wr);
                 r->err = -1;
                 del_from_list(r);
                 end_request(r);
@@ -322,6 +323,7 @@ static void worker(Connect *r)
             }
             else
             {
+                fprintf(stderr, "<%s:%d> Error read_http_headers()=%d\n", __func__, __LINE__, ret);
                 r->err = -1;
                 del_from_list(r);
                 end_request(r);
@@ -348,6 +350,7 @@ static void worker(Connect *r)
                 int ret = chunk(r);
                 if (ret < 0)
                 {
+                    fprintf(stderr, "<%s:%d> Error chunk()=%d\n", __func__, __LINE__, ret);
                     r->err = -1;
                     del_from_list(r);
                     end_request(r);
@@ -428,9 +431,9 @@ static void worker(Connect *r)
                 {
                     del_from_list(r);
                     end_request(r);
-                    return;
                 }
-                r->sock_timer = 0;
+                else
+                    r->sock_timer = 0;
             }
         }
         else
@@ -449,6 +452,7 @@ static void worker(Connect *r)
                     }
                     else
                     {
+                        fprintf(stderr, "<%s:%d> Error read_from_server()=%d\n", __func__, __LINE__, ret);
                         r->err = -1;
                         del_from_list(r);
                         end_request(r);
@@ -495,6 +499,7 @@ static void worker(Connect *r)
                         }
                         else
                         {
+                            fprintf(stderr, "<%s:%d> Error read_from_server()=%d\n", __func__, __LINE__, ret);
                             r->err = -1;
                             del_from_list(r);
                             end_request(r);
@@ -516,6 +521,7 @@ static void worker(Connect *r)
                         ret = chunk(r);
                         if (ret < 0)
                         {
+                            fprintf(stderr, "<%s:%d> Error chunk()=%d\n", __func__, __LINE__, ret);
                             r->err = -1;
                             del_from_list(r);
                             end_request(r);

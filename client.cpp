@@ -98,29 +98,33 @@ printf(" %s\n\n", argv[0]);
     signal(SIGPIPE, SIG_IGN);
     int run_ = 1;
 
-    printf("Input [Protocol: http/https] or [q: Exit]\n>>> ");
-    fflush(stdout);
-    std_in(s, sizeof(s));
-    if (s[0] == 'q')
-        return 0;
-    
-    if (!strcmp(s, "https"))
+    while (true)
     {
-        c.ctx = InitCTX();
-        c.Protocol = HTTPS;
-        SSL *ssl = SSL_new(c.ctx);
-        printf("SSL version: %s\n", SSL_get_version(ssl));
-        SSL_free(ssl);
-    }
-    else if (!strcmp(s, "http"))
-    {
-        c.ctx = NULL;
-        c.Protocol = HTTP;
-    }
-    else
-    {
-        printf("? Protocol: %s\n", s);
-        return 1;
+        printf("Input [Protocol: http/https] or [q: Exit]\n>>> ");
+        fflush(stdout);
+        std_in(s, sizeof(s));
+        if (s[0] == 'q')
+            return 0;
+
+        if (!strcmp(s, "https"))
+        {
+            c.ctx = InitCTX();
+            c.Protocol = HTTPS;
+            SSL *ssl = SSL_new(c.ctx);
+            printf("SSL version: %s\n", SSL_get_version(ssl));
+            SSL_free(ssl);
+            break;
+        }
+        else if (!strcmp(s, "http"))
+        {
+            c.ctx = NULL;
+            c.Protocol = HTTP;
+            break;
+        }
+        else
+        {
+            printf("? Protocol: %s\n", s);
+        }
     }
 
     while (run_)
@@ -149,7 +153,7 @@ printf(" %s\n\n", argv[0]);
         std_in(c.port, sizeof(c.port));
         if (c.port[0] == 'q')
             break;
-        if (c.port[0] == 'c')
+        else if (c.port[0] == 'c')
             continue;
 
         if (is_number(c.port) == 0)
@@ -163,7 +167,7 @@ printf(" %s\n\n", argv[0]);
         std_in(s, sizeof(s));
         if (s[0] == 'q')
             break;
-        if (s[0] == 'c')
+        else if (s[0] == 'c')
             continue;
         if (sscanf(s, "%d", &numProc) != 1)
         {
@@ -182,7 +186,7 @@ printf(" %s\n\n", argv[0]);
         std_in(s, sizeof(s));
         if (s[0] == 'q')
             break;
-        if (s[0] == 'c')
+        else if (s[0] == 'c')
             continue;
         if (sscanf(s, "%d", &c.num_connections) != 1)
         {
@@ -195,7 +199,7 @@ printf(" %s\n\n", argv[0]);
         std_in(s, sizeof(s));
         if (s[0] == 'q')
             break;
-        if (s[0] == 'c')
+        else if (s[0] == 'c')
             continue;
         if (sscanf(s, "%d", &c.num_requests) != 1)
         {
@@ -229,36 +233,46 @@ printf(" %s\n\n", argv[0]);
         else
             exit(1);
 
-        char first_req[1500];
-        snprintf(first_req, sizeof(first_req), "HEAD %s HTTP/1.1\r\n"
-                                                "Host: %s\r\n"
-                                                "User-Agent: anonymous\r\n"
-                                                "Connection: close\r\n"
-                                                "\r\n", Uri, Host);
-        Connect req;
-        req.servSocket = servSocket;
-        req.err = 0;
-        req.ssl_err = 0;
-        req.req.ptr = first_req;
-        req.req.len = strlen(first_req);
-
-        printf("--------------------------------------------\n"
-               "%s"
-               "--------------------------------------------\n", first_req);
-        n = client(&req);
-        shutdown(servSocket, SHUT_RDWR);
-        close(servSocket);
-        if (n < 0)
+        printf("Send HEAD request?[y/n]: ");
+        fflush(stdout);
+        std_in(s, sizeof(s));
+        if (s[0] == 'q')
+            break;
+        else if (s[0] == 'c')
+            continue;
+        else if (s[0] == 'y')
         {
-            fprintf(stdout, "<%s:%d> Error client()\n", __func__, __LINE__);
-            time(&now);
-            printf("\n%s", ctime(&now));
-            continue;
-        }
+            char first_req[1500];
+            snprintf(first_req, sizeof(first_req), "HEAD %s HTTP/1.1\r\n"
+                                                    "Host: %s\r\n"
+                                                    "User-Agent: anonymous\r\n"
+                                                    "Connection: close\r\n"
+                                                    "\r\n", Uri, Host);
+            Connect req;
+            req.servSocket = servSocket;
+            req.err = 0;
+            req.ssl_err = 0;
+            req.req.ptr = first_req;
+            req.req.len = strlen(first_req);
 
-        printf("*************** Status: %d ****************\n", req.respStatus);
-        if (req.respStatus >= 300)
-            continue;
+            printf("--------------------------------------------\n"
+                   "%s"
+                   "--------------------------------------------\n", first_req);
+            n = client(&req);
+            shutdown(servSocket, SHUT_RDWR);
+            close(servSocket);
+            if (n < 0)
+            {
+                fprintf(stdout, "<%s:%d> Error client()\n", __func__, __LINE__);
+                time(&now);
+                printf("\n%s", ctime(&now));
+                continue;
+            }
+
+            printf("*************** Status: %d ****************\n", req.respStatus);
+            if (req.respStatus >= 300)
+                continue;
+        }
         //--------------------------------------------------------------
         int num = 0;
         int f_log = create_log_file();
@@ -285,7 +299,7 @@ printf(" %s\n\n", argv[0]);
 
         while (wait(NULL) != -1);
         time(&now);
-        printf("\nEnd %s", ctime(&now));
+        printf("\n %s", ctime(&now));
         close(f_log);
     }
 

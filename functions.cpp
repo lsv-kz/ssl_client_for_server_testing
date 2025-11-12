@@ -167,7 +167,11 @@ int get_size_chunk(Connect *r)
 
     int n = p - r->resp.ptr + 1;
     if (n > 8)
+    {
+        fprintf(stderr, "<%s:%d> Error n=%d\n", __func__, __LINE__, n);
+        hex_dump_stderr(__func__, __LINE__, r->resp.ptr, 8);
         return -1;
+    }
 
     if (sscanf(r->resp.ptr, "%lx", &r->chunk.size) == 1)
     {
@@ -176,7 +180,11 @@ int get_size_chunk(Connect *r)
         return r->chunk.size;
     }
     else
+    {
+        fprintf(stderr, "<%s:%d> Error len=%lu\n", __func__, __LINE__, strlen(r->resp.ptr));
+        hex_dump_stderr(__func__, __LINE__, r->resp.ptr, 8);
         return -1;
+    }
 }
 //======================================================================
 const char *get_str_operation(OPERATION_TYPE n)

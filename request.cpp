@@ -481,9 +481,9 @@ static void worker(Connect *r)
                 {
                     del_from_list(r);
                     end_request(r);
-                    return;
                 }
-                r->sock_timer = 0;
+                else
+                    r->sock_timer = 0;
             }
         }
         else

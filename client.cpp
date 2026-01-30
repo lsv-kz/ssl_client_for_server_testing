@@ -2,7 +2,7 @@
 
 using namespace std;
 
-char Host[128] = "0.0.0.0";
+char Host[256] = "0.0.0.0";
 char IP[256];
 int ai_family;
 const char *end_line = "\r\n";
@@ -233,7 +233,7 @@ printf(" %s\n\n", argv[0]);
         else
             exit(1);
 
-        printf("Send HEAD request?[y/n]: ");
+        printf("Send HEAD request? [y/n]: ");
         fflush(stdout);
         std_in(s, sizeof(s));
         if (s[0] == 'q')

@@ -230,6 +230,14 @@ int client(Connect *r)
             return -1;
         }
 
+        int err = SSL_set_tlsext_host_name(r->ssl, Host);
+        if (err != 1)
+        {
+            fprintf(stderr, "<%s:%d> Error SSL_set_tlsext_host_name()\n", __func__, __LINE__);
+            ERR_print_errors_fp(stderr);
+            return -1;
+        }
+
         SSL_set_fd(r->ssl, r->servSocket);
         r->operation = SSL_CONNECT;
         r->event = POLLIN;

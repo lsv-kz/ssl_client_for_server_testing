@@ -103,6 +103,16 @@ gettimeofday(&time1, NULL);
                 break;
             }
 
+            int err = SSL_set_tlsext_host_name(req->ssl, Host);
+            if (err != 1)
+            {
+                fprintf(stderr, "[%d]<%s:%d> Error SSL_set_tlsext_host_name()\n", numProc, __func__, __LINE__);
+                ERR_print_errors_fp(stderr);
+                close(req->servSocket);
+                delete req;
+                break;
+            }
+
             if (!SSL_set_fd(req->ssl, req->servSocket))
             {
                 fprintf(stderr, "[%d]<%s:%d> Error SSL_set_fd()\n", numProc, __func__, __LINE__);

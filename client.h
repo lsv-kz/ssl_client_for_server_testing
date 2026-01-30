@@ -33,7 +33,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-extern char Host[128];
+extern char Host[256];
 extern char IP[256];
 extern int ai_family;
 extern char Uri[1024];

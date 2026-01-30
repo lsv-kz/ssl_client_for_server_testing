@@ -101,7 +101,7 @@ int create_client_socket_ip4(const char *ip, const char *port, int *err)
     return sockfd;
 }
 //======================================================================
-int create_client_socket_ip6(const char * host, const char *port, int *err)
+int create_client_socket_ip6(const char *host, const char *port, int *err)
 {
     int sockfd;
     struct sockaddr_in6 sin6;
@@ -111,7 +111,7 @@ int create_client_socket_ip6(const char * host, const char *port, int *err)
 
     memset(&sin6, 0, sizeof(sin6));
     sin6.sin6_family = PF_INET6;
-    inet_pton (PF_INET6, host, sin6.sin6_addr.s6_addr);
+    inet_pton(PF_INET6, host, sin6.sin6_addr.s6_addr);
     sin6.sin6_port = htons(atoi(port));
 
     sockfd = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);
